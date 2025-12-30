@@ -14,31 +14,54 @@ async def _put_image() -> Attachment:
     file_name = 'dialx-banner.png'
     image_path = Path(__file__).parent.parent.parent / file_name
     mime_type_png = 'image/png'
-    # TODO:
-    #  1. Create DialBucketClient
-    #  2. Open image file
-    #  3. Use BytesIO to load bytes of image
-    #  4. Upload file with client
-    #  5. Return Attachment object with title (file name), url and type (mime type)
-    raise NotImplementedError
+
+    async with DialBucketClient(api_key=API_KEY, base_url=DIAL_URL) as client:
+        with open(image_path, "rb") as f:
+            content = BytesIO(f.read())
+
+        print(f"Uploading {file_name}...")
+        response = await client.put_file(name=file_name, mime_type=mime_type_png, content=content)
+        print(f"Upload complete. URL: {response.get('url')}")
+
+        return Attachment(
+            title=file_name,
+            type=mime_type_png,
+            url=response.get('url')
+        )
 
 
 def start() -> None:
-    # TODO:
-    #  1. Create DialModelClient
-    #  2. Upload image (use `_put_image` method )
-    #  3. Print attachment to see result
-    #  4. Call chat completion via client with list containing one Message:
-    #    - role: Role.USER
-    #    - content: "What do you see on this picture?"
-    #    - custom_content: CustomContent(attachments=[attachment])
-    #  ---------------------------------------------------------------------------------------------------------------
-    #  Note: This approach uploads the image to DIAL bucket and references it via attachment. The key benefit of this
-    #        approach that we can use Models from different vendors (OpenAI, Google, Anthropic). The DIAL Core
-    #        adapts this attachment to Message content in appropriate format for Model.
-    #  TRY THIS APPROACH WITH DIFFERENT MODELS!
-    #  Optional: Try upload 2+ pictures for analysis
-    raise NotImplementedError
+    # 1. Create DialBucketClient and upload image
+    print(f"Starting image upload...")
+    attachment = asyncio.run(_put_image())
+
+    # 2. Setup models to test
+    # Note: Add other models like 'claude-3-sonnet' if available in your environment
+    models = ["gpt-4o"]
+
+    for model_name in models:
+        print("\n" + "="*60)
+        print(f"Testing with model: {model_name}")
+        print("="*60 + "\n")
+
+        client = DialModelClient(
+            endpoint=DIAL_CHAT_COMPLETIONS_ENDPOINT,
+            deployment_name=model_name,
+            api_key=API_KEY
+        )
+
+        message = Message(
+            role=Role.USER,
+            content="What do you see on this picture?",
+            custom_content=CustomContent(attachments=[attachment])
+        )
+
+        try:
+            response = client.get_completion(messages=[message])
+            print(f"\nResponse from {model_name}:\n")
+            print(response.content)
+        except Exception as e:
+            print(f"Error calling {model_name}: {e}")
 
 
 start()
